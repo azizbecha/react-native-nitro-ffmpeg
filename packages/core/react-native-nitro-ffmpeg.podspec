@@ -2,24 +2,12 @@ require "json"
 
 package = JSON.parse(File.read(File.join(__dir__, "package.json")))
 
-# Resolve FFmpeg binary package
-ffmpeg_packages = [
-  "ffmpeg-full-gpl",
-  "ffmpeg-full",
-  "ffmpeg-min",
-]
+ffmpeg_packages = ["ffmpeg-full-gpl", "ffmpeg-full", "ffmpeg-min"]
 
 binary_package = nil
 ffmpeg_packages.each do |pkg|
-  # Check in monorepo node_modules
-  candidate = File.join(__dir__, "..", "..", "node_modules", "@react-native-nitro-ffmpeg", pkg)
-  if File.exist?(candidate)
-    binary_package = candidate
-    break
-  end
-  # Check hoisted
-  candidate = File.join(__dir__, "..", "node_modules", "@react-native-nitro-ffmpeg", pkg)
-  if File.exist?(candidate)
+  candidate = File.join(__dir__, "..", pkg)
+  if File.exist?(candidate) && (File.exist?(File.join(candidate, "ios", "lib")) || File.exist?(File.join(candidate, "ios", "Frameworks")))
     binary_package = candidate
     break
   end
@@ -47,26 +35,32 @@ Pod::Spec.new do |s|
     "cpp/**/*.h",
   ]
 
-  # Swift bridging header for FFmpeg C API access
-  s.pod_target_xcconfig = {
-    "SWIFT_OBJC_BRIDGING_HEADER" => "$(PODS_TARGET_SRCROOT)/ios/NitroFFmpeg-Bridging-Header.h",
+  xcconfig = {
     "CLANG_CXX_LANGUAGE_STANDARD" => "c++20",
-    "OTHER_CFLAGS" => "$(inherited) -DHAVE_FFMPEG=1",
   }
 
   if binary_package
-    s.vendored_frameworks = Dir["#{binary_package}/ios/Frameworks/*.xcframework"]
-
-    # Add FFmpeg headers from binary package
+    # Check for static libraries (.a files)
+    lib_dir = File.join(binary_package, "ios", "lib")
     headers_dir = File.join(binary_package, "ios", "include")
+    frameworks_dir = File.join(binary_package, "ios", "Frameworks")
+
+    if File.exist?(lib_dir)
+      s.vendored_libraries = Dir["#{lib_dir}/*.a"]
+      xcconfig["OTHER_CFLAGS"] = "$(inherited) -DHAVE_FFMPEG=1"
+    elsif File.exist?(frameworks_dir)
+      s.vendored_frameworks = Dir["#{frameworks_dir}/*.xcframework"]
+      xcconfig["OTHER_CFLAGS"] = "$(inherited) -DHAVE_FFMPEG=1"
+    end
+
     if File.exist?(headers_dir)
-      s.pod_target_xcconfig["HEADER_SEARCH_PATHS"] = "$(inherited) \"#{headers_dir}\""
+      xcconfig["HEADER_SEARCH_PATHS"] = "$(inherited) \"#{headers_dir}\""
     end
   else
-    Pod::UI.warn "[react-native-nitro-ffmpeg] No FFmpeg binary package found. Install one of: " \
-      "@react-native-nitro-ffmpeg/ffmpeg-min, @react-native-nitro-ffmpeg/ffmpeg-full, " \
-      "@react-native-nitro-ffmpeg/ffmpeg-full-gpl"
+    Pod::UI.warn "[react-native-nitro-ffmpeg] No FFmpeg binary package found."
   end
+
+  s.pod_target_xcconfig = xcconfig
 
   s.frameworks = [
     "AudioToolbox",
@@ -75,9 +69,10 @@ Pod::Spec.new do |s|
     "VideoToolbox",
   ]
 
+  s.libraries = ["z", "bz2", "iconv"]
+
   s.dependency "NitroModules"
 
-  # Load Nitrogen autolinking
   nitrogen_autolinking = File.join(__dir__, "nitrogen", "generated", "ios", "NitroFFmpeg+autolinking.rb")
   if File.exist?(nitrogen_autolinking)
     load nitrogen_autolinking

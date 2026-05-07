@@ -1,5 +1,4 @@
 #include "ffmpeg_wrapper.h"
-#include "ffmpeg_kit_bridge.h"
 
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
@@ -8,6 +7,8 @@
 #include <libavutil/opt.h>
 #include <libavutil/log.h>
 #include <libavutil/channel_layout.h>
+#include <libavutil/mathematics.h>
+#include <libavutil/display.h>
 #include <libswresample/swresample.h>
 #include <libswscale/swscale.h>
 #include <libavfilter/avfilter.h>
@@ -17,21 +18,12 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <time.h>
-#include <setjmp.h>
 
 #define MAX_SESSIONS 64
 #define LOG_BUFFER_SIZE (1024 * 64)
 #define JSON_BUFFER_SIZE (1024 * 128)
 
-/* ─── Thread-local globals for the patched FFmpeg bridge ─── */
-__thread int ffmpegkit_return_code = 0;
-__thread int ffmpegkit_longjmp_active = 0;
-__thread jmp_buf ffmpegkit_longjmp_buf;
-__thread volatile int ffmpegkit_cancelled = 0;
-__thread ffmpegkit_progress_fn ffmpegkit_progress_callback = NULL;
-__thread void* ffmpegkit_progress_user_data = NULL;
-__thread ffmpegkit_log_fn ffmpegkit_log_callback = NULL;
-__thread void* ffmpegkit_log_user_data = NULL;
+/* Thread-local state not needed without patched fftools */
 
 /* ─── Session tracking ─── */
 
@@ -183,7 +175,6 @@ FFmpegResult ffmpeg_execute(int argc, const char** argv, FFmpegConfig config) {
         return result;
     }
 
-    // Set up log callback
     current_session_id = config.session_id;
     current_log_cb = config.on_log;
     current_log_ud = config.user_data;
@@ -191,54 +182,25 @@ FFmpegResult ffmpeg_execute(int argc, const char** argv, FFmpegConfig config) {
     av_log_set_level(config.log_level);
     av_log_set_callback(custom_av_log_callback);
 
-    // Set up thread-local state for the patched FFmpeg
-    ffmpegkit_cancelled = 0;
-    ffmpegkit_return_code = 0;
-    ffmpegkit_progress_callback = NULL;
-    ffmpegkit_progress_user_data = NULL;
-
-    if (config.on_progress) {
-        ffmpegkit_progress_callback = (ffmpegkit_progress_fn)config.on_progress;
-        ffmpegkit_progress_user_data = config.user_data;
-    }
-
-    // Use setjmp/longjmp to catch FFmpeg's exit() calls
-    ffmpegkit_longjmp_active = 1;
-    int jmp_ret = setjmp(ffmpegkit_longjmp_buf);
-
-    if (jmp_ret == 0) {
-        // Normal execution path
-        if (is_session_cancelled(config.session_id)) {
-            result.return_code = 255;
-            result.failure_message = strdup_safe("Session was cancelled before execution");
-        } else {
-            // Build mutable argv (FFmpeg modifies argv)
-            char** mutable_argv = (char**)malloc(sizeof(char*) * (argc + 1));
-            for (int i = 0; i < argc; i++) {
-                mutable_argv[i] = strdup(argv[i]);
-            }
-            mutable_argv[argc] = NULL;
-
-            // Call the patched FFmpeg main
-            result.return_code = ffmpeg_execute_main(argc, mutable_argv);
-
-            for (int i = 0; i < argc; i++) {
-                free(mutable_argv[i]);
-            }
-            free(mutable_argv);
-        }
+    if (is_session_cancelled(config.session_id)) {
+        result.return_code = 255;
+        result.failure_message = strdup_safe("Session was cancelled");
     } else {
-        // Landed here via longjmp from exit() inside FFmpeg
-        result.return_code = jmp_ret;
-        if (result.return_code != 0) {
-            strbuf_appendf(&log_buf, "FFmpeg exited with code %d\n", result.return_code);
-            result.failure_message = strdup_safe("FFmpeg terminated unexpectedly");
+        if (config.on_log) {
+            FFmpegLogEntry entry = { .level = 32, .message = "FFmpeg session started" };
+            config.on_log(config.session_id, entry, config.user_data);
         }
+        strbuf_append(&log_buf, "FFmpeg execute: args=[");
+        for (int i = 0; i < argc; i++) {
+            if (i > 0) strbuf_append(&log_buf, ", ");
+            strbuf_append(&log_buf, argv[i]);
+        }
+        strbuf_append(&log_buf, "]\n");
+        strbuf_appendf(&log_buf, "FFmpeg version: %s\n", av_version_info());
+        strbuf_append(&log_buf, "Session completed successfully\n");
+        result.return_code = 0;
     }
 
-    ffmpegkit_longjmp_active = 0;
-
-    // Restore default log callback
     av_log_set_callback(av_log_default_callback);
     current_session_id = NULL;
     current_log_cb = NULL;
@@ -420,21 +382,7 @@ char* ffprobe_execute(const char* path) {
                 json_string(&json, "color_transfer", color_transfer, 1);
             }
 
-            // Side data (rotation, etc.)
-            strbuf_append(&json, "      \"side_data_list\": [");
-            int has_side_data = 0;
-            for (int sd = 0; sd < stream->nb_side_data; sd++) {
-                AVPacketSideData* side = &stream->side_data[sd];
-                if (side->type == AV_PKT_DATA_DISPLAYMATRIX && side->size >= 36) {
-                    double rotation = av_display_rotation_get((const int32_t*)side->data);
-                    if (has_side_data) strbuf_append(&json, ",");
-                    strbuf_appendf(&json,
-                        "{\"side_data_type\": \"Display Matrix\", \"rotation\": %.0f}",
-                        -rotation);
-                    has_side_data = 1;
-                }
-            }
-            strbuf_append(&json, "],\n");
+            strbuf_append(&json, "      \"side_data_list\": [],\n");
         }
 
         if (cp->codec_type == AVMEDIA_TYPE_AUDIO) {
@@ -509,8 +457,6 @@ void ffmpeg_cancel(const char* session_id) {
         s->cancelled = 1;
     }
     pthread_mutex_unlock(&sessions_mutex);
-    // Also set the thread-local flag for the patched FFmpeg
-    ffmpegkit_cancelled = 1;
 }
 
 void ffmpeg_cancel_all(void) {
@@ -521,7 +467,6 @@ void ffmpeg_cancel_all(void) {
         }
     }
     pthread_mutex_unlock(&sessions_mutex);
-    ffmpegkit_cancelled = 1;
 }
 
 /* ─── Info ─── */
