@@ -30,3 +30,10 @@ Thumbs.db
 # Environment
 .env
 .env.local
+example/ios/Pods/
+example/node_modules/
+example/package-lock.json
+example/android/.gradle/
+example/android/app/.cxx/
+example/android/app/build/
+example/android/build/
