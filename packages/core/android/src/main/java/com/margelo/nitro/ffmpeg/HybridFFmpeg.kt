@@ -13,39 +13,75 @@ class HybridFFmpeg : HybridFFmpegSpec() {
     override var onLog: (sessionId: String, log: NativeLogEntry) -> Unit = { _, _ -> }
     override var onComplete: (sessionId: String, result: NativeSessionResult) -> Unit = { _, _ -> }
 
+    companion object {
+        init {
+            System.loadLibrary("NitroFFmpeg")
+        }
+    }
+
     override fun execute(sessionId: String, args: Array<String>, logLevel: Double) {
         val state = SessionState(sessionId, args)
         sessions[sessionId] = state
 
+        val capturedOnProgress = onProgress
+        val capturedOnLog = onLog
         val capturedOnComplete = onComplete
 
         executor.submit {
             val startTime = System.currentTimeMillis()
 
-            // TODO: Call FFmpeg via JNI here with the provided args
-            // This is where you would call into the native FFmpeg library
-            val duration = (System.currentTimeMillis() - startTime).toDouble()
+            val returnCode = nativeExecute(
+                sessionId,
+                args,
+                logLevel.toInt(),
+                { sid, frame, fps, bitrate, totalSize, timeMs, speed ->
+                    capturedOnProgress(sid, NativeProgress(
+                        frame = frame,
+                        fps = fps,
+                        bitrate = bitrate,
+                        totalSize = totalSize,
+                        timeMs = timeMs,
+                        speed = speed
+                    ))
+                },
+                { sid, level, message ->
+                    capturedOnLog(sid, NativeLogEntry(
+                        level = level,
+                        message = message
+                    ))
+                }
+            )
 
+            val duration = (System.currentTimeMillis() - startTime).toDouble()
             sessions.remove(sessionId)
 
-            val result = NativeSessionResult(
+            val failureMessage = if (returnCode != 0 && returnCode != 255) {
+                "FFmpeg exited with code $returnCode"
+            } else if (returnCode == 255) {
+                "Session was cancelled"
+            } else {
+                null
+            }
+
+            capturedOnComplete(sessionId, NativeSessionResult(
                 sessionId = sessionId,
-                returnCode = 0.0,
+                returnCode = returnCode.toDouble(),
                 duration = duration,
                 logs = "",
                 command = args,
-                failureMessage = null
-            )
-            capturedOnComplete(sessionId, result)
+                failureMessage = failureMessage
+            ))
         }
     }
 
     override fun cancel(sessionId: String) {
         sessions[sessionId]?.cancelled?.set(true)
+        nativeCancel(sessionId)
     }
 
     override fun cancelAll() {
         sessions.values.forEach { it.cancelled.set(true) }
+        nativeCancelAll()
     }
 
     override fun getActiveSessions(): Array<String> {
@@ -54,25 +90,37 @@ class HybridFFmpeg : HybridFFmpegSpec() {
 
     override fun probe(path: String): Promise<String> {
         return Promise.async {
-            // TODO: Call FFprobe via JNI here
-            "{}"
+            nativeProbe(path)
         }
     }
 
     override fun getFFmpegVersion(): String {
-        // TODO: Return actual FFmpeg version from native library
-        return "7.0"
+        return nativeGetVersion()
     }
 
     override fun getSupportedEncoders(): Array<String> {
-        // TODO: Query FFmpeg for supported encoders
-        return emptyArray()
+        return nativeGetEncoders()
     }
 
     override fun getSupportedDecoders(): Array<String> {
-        // TODO: Query FFmpeg for supported decoders
-        return emptyArray()
+        return nativeGetDecoders()
     }
+
+    // JNI methods
+    private external fun nativeExecute(
+        sessionId: String,
+        args: Array<String>,
+        logLevel: Int,
+        progressCallback: (String, Double, Double, Double, Double, Double, Double) -> Unit,
+        logCallback: (String, Double, String) -> Unit
+    ): Int
+
+    private external fun nativeCancel(sessionId: String)
+    private external fun nativeCancelAll()
+    private external fun nativeProbe(path: String): String
+    private external fun nativeGetVersion(): String
+    private external fun nativeGetEncoders(): Array<String>
+    private external fun nativeGetDecoders(): Array<String>
 
     private data class SessionState(
         val sessionId: String,
