@@ -9,6 +9,7 @@ import com.facebook.react.ReactNativeHost
 import com.facebook.react.ReactPackage
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
+import android.preference.PreferenceManager
 
 class MainApplication : Application(), ReactApplication {
 
@@ -28,11 +29,17 @@ class MainApplication : Application(), ReactApplication {
         override val isHermesEnabled: Boolean = BuildConfig.IS_HERMES_ENABLED
       }
 
-  override val reactHost: ReactHost
-    get() = getDefaultReactHost(applicationContext, reactNativeHost)
-
   override fun onCreate() {
     super.onCreate()
+    if (BuildConfig.DEBUG) {
+      val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+      if (!prefs.contains("debug_http_host")) {
+        prefs.edit().putString("debug_http_host", "10.0.2.2:8081").apply()
+      }
+    }
     loadReactNative(this)
   }
+
+  override val reactHost: ReactHost
+    get() = getDefaultReactHost(applicationContext, reactNativeHost)
 }
