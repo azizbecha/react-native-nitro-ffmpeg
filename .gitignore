@@ -1,0 +1,32 @@
+node_modules/
+lib/
+build/
+*.tgz
+
+# iOS
+ios/Pods/
+ios/build/
+*.xcworkspace
+*.xcuserdata
+
+# Android
+android/build/
+android/.gradle/
+android/local.properties
+
+# Nitrogen generated (committed, but good to know)
+# nitrogen/generated/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local

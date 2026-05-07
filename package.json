@@ -1,0 +1,15 @@
+{
+  "name": "react-native-nitro-ffmpeg-monorepo",
+  "private": true,
+  "scripts": {
+    "build": "pnpm --filter @react-native-nitro-ffmpeg/core build",
+    "typecheck": "pnpm --filter @react-native-nitro-ffmpeg/core typecheck",
+    "lint": "pnpm --filter @react-native-nitro-ffmpeg/core lint",
+    "test": "pnpm --filter @react-native-nitro-ffmpeg/core test",
+    "nitrogen": "pnpm --filter @react-native-nitro-ffmpeg/core nitrogen",
+    "prepare": "pnpm --filter @react-native-nitro-ffmpeg/core prepare"
+  },
+  "devDependencies": {
+    "lefthook": "^2.0.3"
+  }
+}

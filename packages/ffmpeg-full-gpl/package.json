@@ -1,0 +1,19 @@
+{
+  "name": "@react-native-nitro-ffmpeg/ffmpeg-full-gpl",
+  "version": "0.1.0",
+  "description": "FFmpeg full GPL binary for react-native-nitro-ffmpeg (all codecs including x264, x265)",
+  "license": "GPL-3.0",
+  "author": "Aziz Becha <aziz07becha@gmail.com> (https://github.com/azizbecha)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/azizbecha/react-native-nitro-ffmpeg.git",
+    "directory": "packages/ffmpeg-full-gpl"
+  },
+  "files": [
+    "android",
+    "ios"
+  ],
+  "peerDependencies": {
+    "@react-native-nitro-ffmpeg/core": "*"
+  }
+}

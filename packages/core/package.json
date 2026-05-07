@@ -1,0 +1,132 @@
+{
+  "name": "@react-native-nitro-ffmpeg/core",
+  "version": "0.1.0",
+  "description": "High-performance FFmpeg for React Native, powered by Nitro Modules",
+  "keywords": [
+    "react-native",
+    "ffmpeg",
+    "nitro",
+    "video",
+    "audio",
+    "transcode",
+    "compress",
+    "ios",
+    "android"
+  ],
+  "homepage": "https://github.com/azizbecha/react-native-nitro-ffmpeg#readme",
+  "bugs": {
+    "url": "https://github.com/azizbecha/react-native-nitro-ffmpeg/issues"
+  },
+  "license": "MIT",
+  "author": "Aziz Becha <aziz07becha@gmail.com> (https://github.com/azizbecha)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/azizbecha/react-native-nitro-ffmpeg.git",
+    "directory": "packages/core"
+  },
+  "files": [
+    "*.podspec",
+    "android",
+    "cpp",
+    "ios",
+    "lib",
+    "nitrogen",
+    "plugin",
+    "src",
+    "nitro.json",
+    "!**/.*",
+    "!**/__tests__",
+    "!android/build",
+    "!android/gradle",
+    "!android/gradlew",
+    "!android/gradlew.bat",
+    "!android/local.properties",
+    "!ios/build"
+  ],
+  "sideEffects": false,
+  "main": "./lib/module/index.js",
+  "types": "./lib/typescript/src/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "import": {
+        "types": "./lib/typescript/src/index.d.ts",
+        "default": "./lib/module/index.js"
+      },
+      "require": {
+        "types": "./lib/typescript/src/index.d.ts",
+        "default": "./lib/commonjs/index.js"
+      }
+    },
+    "./plugin": "./plugin/withNitroFFmpeg.js",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "clean": "del-cli lib",
+    "prepare": "bob build",
+    "nitrogen": "nitrogen",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
+    "test": "vitest run",
+    "release": "release-it --only-version"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@commitlint/config-conventional": "^19.8.1",
+    "@release-it/conventional-changelog": "^10.0.1",
+    "@types/react": "^19.1.12",
+    "commitlint": "^19.8.1",
+    "del-cli": "^6.0.0",
+    "nitrogen": "^1.0.0",
+    "oxlint": "^1.41.0",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-builder-bob": "^0.40.17",
+    "react-native-nitro-modules": "^0.22.0",
+    "release-it": "^19.0.4",
+    "typescript": "^5.9.2",
+    "vitest": "^4.0.18"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": ">=0.76.0",
+    "react-native-nitro-modules": ">=0.18.0"
+  },
+  "peerDependenciesMeta": {
+    "@react-native-nitro-ffmpeg/ffmpeg-min": {
+      "optional": true
+    },
+    "@react-native-nitro-ffmpeg/ffmpeg-full": {
+      "optional": true
+    },
+    "@react-native-nitro-ffmpeg/ffmpeg-full-gpl": {
+      "optional": true
+    }
+  },
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
+  },
+  "react-native-builder-bob": {
+    "source": "src",
+    "output": "lib",
+    "targets": [
+      [
+        "module",
+        {
+          "esm": true
+        }
+      ],
+      [
+        "typescript",
+        {
+          "project": "tsconfig.build.json"
+        }
+      ]
+    ]
+  }
+}

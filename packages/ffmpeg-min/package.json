@@ -1,0 +1,19 @@
+{
+  "name": "@react-native-nitro-ffmpeg/ffmpeg-min",
+  "version": "0.1.0",
+  "description": "FFmpeg minimal LGPL binary for react-native-nitro-ffmpeg (core codecs only)",
+  "license": "LGPL-3.0",
+  "author": "Aziz Becha <aziz07becha@gmail.com> (https://github.com/azizbecha)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/azizbecha/react-native-nitro-ffmpeg.git",
+    "directory": "packages/ffmpeg-min"
+  },
+  "files": [
+    "android",
+    "ios"
+  ],
+  "peerDependencies": {
+    "@react-native-nitro-ffmpeg/core": "*"
+  }
+}
