@@ -10,8 +10,14 @@
   },
   "autolinking": {
     "FFmpeg": {
-      "swift": "HybridFFmpeg",
-      "kotlin": "HybridFFmpeg"
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridFFmpeg"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridFFmpeg"
+      }
     }
   },
   "ignorePaths": ["node_modules", "lib", "example"]

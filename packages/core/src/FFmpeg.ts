@@ -36,6 +36,51 @@ type ProgressListener = (progress: Progress) => void;
 type LogListener = (log: LogEntry) => void;
 type Unsubscribe = () => void;
 
+interface AsyncQueue<T> {
+  push(value: T): void;
+  close(): void;
+  iterate(): AsyncIterable<T>;
+}
+
+function createAsyncQueue<T>(): AsyncQueue<T> {
+  const buffer: T[] = [];
+  let resolve: (() => void) | null = null;
+  let done = false;
+
+  return {
+    push(value: T) {
+      if (done) return;
+      buffer.push(value);
+      resolve?.();
+      resolve = null;
+    },
+    close() {
+      done = true;
+      resolve?.();
+      resolve = null;
+    },
+    iterate(): AsyncIterable<T> {
+      return {
+        [Symbol.asyncIterator]() {
+          return {
+            async next(): Promise<IteratorResult<T>> {
+              while (buffer.length === 0 && !done) {
+                await new Promise<void>((r) => {
+                  resolve = r;
+                });
+              }
+              if (buffer.length > 0) {
+                return { done: false, value: buffer.shift()! };
+              }
+              return { done: true, value: undefined };
+            },
+          };
+        },
+      };
+    },
+  };
+}
+
 class FFmpegSessionImpl implements PromiseLike<SessionResult> {
   readonly sessionId: string;
   private _resolve!: (result: SessionResult) => void;
@@ -47,30 +92,18 @@ class FFmpegSessionImpl implements PromiseLike<SessionResult> {
   private _cancelled = false;
   private _estimatedDurationMs?: number;
 
-  private _progressController: ReadableStreamDefaultController<Progress> | null = null;
-  private _logController: ReadableStreamDefaultController<LogEntry> | null = null;
-  private readonly _progressStream: ReadableStream<Progress>;
-  private readonly _logStream: ReadableStream<LogEntry>;
+  private readonly _progressQueue: AsyncQueue<Progress>;
+  private readonly _logQueue: AsyncQueue<LogEntry>;
 
   constructor(command: string[], options?: ExecuteOptions) {
     this._command = command;
     this._estimatedDurationMs = options?.estimatedDurationMs;
+    this._progressQueue = createAsyncQueue<Progress>();
+    this._logQueue = createAsyncQueue<LogEntry>();
 
     this._promise = new Promise<SessionResult>((resolve, reject) => {
       this._resolve = resolve;
       this._reject = reject;
-    });
-
-    this._progressStream = new ReadableStream<Progress>({
-      start: (controller) => {
-        this._progressController = controller;
-      },
-    });
-
-    this._logStream = new ReadableStream<LogEntry>({
-      start: (controller) => {
-        this._logController = controller;
-      },
     });
 
     this.sessionId = String(nextSessionId++);
@@ -139,11 +172,11 @@ class FFmpegSessionImpl implements PromiseLike<SessionResult> {
   }
 
   get progress(): AsyncIterable<Progress> {
-    return this._toAsyncIterable(this._progressStream);
+    return this._progressQueue.iterate();
   }
 
   get logs(): AsyncIterable<LogEntry> {
-    return this._toAsyncIterable(this._logStream);
+    return this._logQueue.iterate();
   }
 
   then<TResult1 = SessionResult, TResult2 = never>(
@@ -174,11 +207,7 @@ class FFmpegSessionImpl implements PromiseLike<SessionResult> {
       listener(progress);
     }
 
-    try {
-      this._progressController?.enqueue(progress);
-    } catch {
-      // Stream may be closed
-    }
+    this._progressQueue.push(progress);
   }
 
   _handleLog(native: { level: number; message: string }): void {
@@ -191,11 +220,7 @@ class FFmpegSessionImpl implements PromiseLike<SessionResult> {
       listener(log);
     }
 
-    try {
-      this._logController?.enqueue(log);
-    } catch {
-      // Stream may be closed
-    }
+    this._logQueue.push(log);
   }
 
   _handleComplete(native: {
@@ -208,12 +233,8 @@ class FFmpegSessionImpl implements PromiseLike<SessionResult> {
   }): void {
     activeSessions.delete(this.sessionId);
 
-    try {
-      this._progressController?.close();
-      this._logController?.close();
-    } catch {
-      // Streams may already be closed
-    }
+    this._progressQueue.close();
+    this._logQueue.close();
 
     const result: SessionResult = {
       sessionId: native.sessionId,
@@ -232,25 +253,6 @@ class FFmpegSessionImpl implements PromiseLike<SessionResult> {
     } else {
       this._resolve(result);
     }
-  }
-
-  private _toAsyncIterable<T>(stream: ReadableStream<T>): AsyncIterable<T> {
-    return {
-      [Symbol.asyncIterator]() {
-        const reader = stream.getReader();
-        return {
-          async next(): Promise<IteratorResult<T>> {
-            const { done, value } = await reader.read();
-            if (done) return { done: true, value: undefined };
-            return { done: false, value };
-          },
-          async return(): Promise<IteratorResult<T>> {
-            reader.releaseLock();
-            return { done: true, value: undefined };
-          },
-        };
-      },
-    };
   }
 }
 

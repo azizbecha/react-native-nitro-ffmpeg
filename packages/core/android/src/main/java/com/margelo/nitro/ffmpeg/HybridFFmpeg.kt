@@ -1,6 +1,6 @@
-package com.nitro.ffmpeg
+package com.margelo.nitro.ffmpeg
 
-import com.margelo.nitro.NitroModules
+import com.margelo.nitro.core.Promise
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -9,22 +9,21 @@ class HybridFFmpeg : HybridFFmpegSpec() {
     private val executor = Executors.newFixedThreadPool(4)
     private val sessions = ConcurrentHashMap<String, SessionState>()
 
-    override var onProgress: ((String, NativeProgress) -> Unit)? = null
-    override var onLog: ((String, NativeLogEntry) -> Unit)? = null
-    override var onComplete: ((String, NativeSessionResult) -> Unit)? = null
-
-    override val memorySize: Long
-        get() = 0L
+    override var onProgress: (sessionId: String, progress: NativeProgress) -> Unit = { _, _ -> }
+    override var onLog: (sessionId: String, log: NativeLogEntry) -> Unit = { _, _ -> }
+    override var onComplete: (sessionId: String, result: NativeSessionResult) -> Unit = { _, _ -> }
 
     override fun execute(sessionId: String, args: Array<String>, logLevel: Double) {
         val state = SessionState(sessionId, args)
         sessions[sessionId] = state
 
+        val capturedOnComplete = onComplete
+
         executor.submit {
             val startTime = System.currentTimeMillis()
 
             // TODO: Call FFmpeg via JNI here with the provided args
-            // For now, simulate completion
+            // This is where you would call into the native FFmpeg library
             val duration = (System.currentTimeMillis() - startTime).toDouble()
 
             sessions.remove(sessionId)
@@ -37,7 +36,7 @@ class HybridFFmpeg : HybridFFmpegSpec() {
                 command = args,
                 failureMessage = null
             )
-            onComplete?.invoke(sessionId, result)
+            capturedOnComplete(sessionId, result)
         }
     }
 
@@ -53,9 +52,11 @@ class HybridFFmpeg : HybridFFmpegSpec() {
         return sessions.keys.toTypedArray()
     }
 
-    override suspend fun probe(path: String): String {
-        // TODO: Call FFprobe via JNI here
-        return "{}"
+    override fun probe(path: String): Promise<String> {
+        return Promise.async {
+            // TODO: Call FFprobe via JNI here
+            "{}"
+        }
     }
 
     override fun getFFmpegVersion(): String {

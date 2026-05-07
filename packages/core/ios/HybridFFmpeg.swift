@@ -2,34 +2,35 @@ import Foundation
 import NitroModules
 
 class HybridFFmpeg: HybridFFmpegSpec {
-    var hybridContext = margelo.nitro.HybridContext()
-    var memorySize: Int { return getSizeOf(self) }
-
     private let sessionQueue = OperationQueue()
     private var sessions: [String: FFmpegSessionState] = [:]
     private let lock = NSLock()
 
-    var onProgress: ((String, NativeProgress) -> Void)?
-    var onLog: ((String, NativeLogEntry) -> Void)?
-    var onComplete: ((String, NativeSessionResult) -> Void)?
+    var onProgress: (_ sessionId: String, _ progress: NativeProgress) -> Void = { _, _ in }
+    var onLog: (_ sessionId: String, _ log: NativeLogEntry) -> Void = { _, _ in }
+    var onComplete: (_ sessionId: String, _ result: NativeSessionResult) -> Void = { _, _ in }
 
-    init() {
+    override init() {
+        super.init()
         sessionQueue.maxConcurrentOperationCount = 4
         sessionQueue.qualityOfService = .userInitiated
     }
 
-    func execute(sessionId: String, args: [String], logLevel: Double) {
+    func execute(sessionId: String, args: [String], logLevel: Double) throws {
         let state = FFmpegSessionState(sessionId: sessionId, args: args)
         lock.lock()
         sessions[sessionId] = state
         lock.unlock()
+
+        let capturedOnComplete = onComplete
 
         sessionQueue.addOperation { [weak self] in
             guard let self = self else { return }
             let startTime = CFAbsoluteTimeGetCurrent()
 
             // TODO: Call FFmpeg C API here with the provided args
-            // For now, simulate completion
+            // This is where you would link against libavcodec, libavformat, etc.
+            // and execute the FFmpeg command using avformat_open_input, etc.
             let duration = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
 
             self.lock.lock()
@@ -44,17 +45,17 @@ class HybridFFmpeg: HybridFFmpegSpec {
                 command: args,
                 failureMessage: nil
             )
-            self.onComplete?(sessionId, result)
+            capturedOnComplete(sessionId, result)
         }
     }
 
-    func cancel(sessionId: String) {
+    func cancel(sessionId: String) throws {
         lock.lock()
         sessions[sessionId]?.cancelled = true
         lock.unlock()
     }
 
-    func cancelAll() {
+    func cancelAll() throws {
         lock.lock()
         for key in sessions.keys {
             sessions[key]?.cancelled = true
@@ -63,35 +64,33 @@ class HybridFFmpeg: HybridFFmpegSpec {
         sessionQueue.cancelAllOperations()
     }
 
-    func getActiveSessions() -> [String] {
+    func getActiveSessions() throws -> [String] {
         lock.lock()
         let ids = Array(sessions.keys)
         lock.unlock()
         return ids
     }
 
-    func probe(path: String) -> Promise<String> {
-        return Promise { resolve, reject in
-            DispatchQueue.global(qos: .userInitiated).async {
-                // TODO: Call FFprobe C API here
-                // For now, return empty JSON
-                resolve("{}")
-            }
+    func probe(path: String) throws -> Promise<String> {
+        return Promise.async {
+            // TODO: Call FFprobe C API here
+            // Parse the media file at `path` and return JSON string
+            return "{}"
         }
     }
 
-    func getFFmpegVersion() -> String {
-        // TODO: Return actual FFmpeg version from native library
+    func getFFmpegVersion() throws -> String {
+        // TODO: Return actual FFmpeg version from av_version_info()
         return "7.0"
     }
 
-    func getSupportedEncoders() -> [String] {
-        // TODO: Query FFmpeg for supported encoders
+    func getSupportedEncoders() throws -> [String] {
+        // TODO: Query FFmpeg for supported encoders via avcodec_iterate()
         return []
     }
 
-    func getSupportedDecoders() -> [String] {
-        // TODO: Query FFmpeg for supported decoders
+    func getSupportedDecoders() throws -> [String] {
+        // TODO: Query FFmpeg for supported decoders via avcodec_iterate()
         return []
     }
 }
