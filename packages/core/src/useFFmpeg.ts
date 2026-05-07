@@ -39,7 +39,7 @@ export function useFFmpeg(): [UseFFmpegState, UseFFmpegActions] {
 
     sessionRef.current = session;
 
-    session.then(
+    Promise.resolve(session).then(
       (res) => {
         setResult(res);
         setIsRunning(false);

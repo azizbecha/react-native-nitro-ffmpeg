@@ -80,12 +80,12 @@
     "@types/react": "^19.1.12",
     "commitlint": "^19.8.1",
     "del-cli": "^6.0.0",
-    "nitrogen": "^1.0.0",
+    "nitrogen": "^0.35.6",
     "oxlint": "^1.41.0",
     "react": "19.1.0",
     "react-native": "0.81.5",
     "react-native-builder-bob": "^0.40.17",
-    "react-native-nitro-modules": "^0.22.0",
+    "react-native-nitro-modules": "^0.35.6",
     "release-it": "^19.0.4",
     "typescript": "^5.9.2",
     "vitest": "^4.0.18"
@@ -93,7 +93,7 @@
   "peerDependencies": {
     "react": "*",
     "react-native": ">=0.76.0",
-    "react-native-nitro-modules": ">=0.18.0"
+    "react-native-nitro-modules": ">=0.35.0"
   },
   "peerDependenciesMeta": {
     "@react-native-nitro-ffmpeg/ffmpeg-min": {

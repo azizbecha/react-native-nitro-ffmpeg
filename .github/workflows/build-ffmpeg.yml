@@ -1,0 +1,190 @@
+name: Build FFmpeg Binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: 'FFmpeg variant to build'
+        required: true
+        type: choice
+        options:
+          - min
+          - full
+          - full-gpl
+      ffmpeg_version:
+        description: 'FFmpeg version'
+        required: true
+        default: '7.1'
+
+env:
+  FFMPEG_VERSION: ${{ github.event.inputs.ffmpeg_version }}
+
+jobs:
+  build-ios:
+    runs-on: macos-14
+    strategy:
+      matrix:
+        arch: [arm64, x86_64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install automake libtool pkg-config nasm
+
+      - name: Download FFmpeg
+        run: |
+          curl -L "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz" | tar xJ
+
+      - name: Configure FFmpeg for iOS (${{ matrix.arch }})
+        working-directory: ffmpeg-${{ env.FFMPEG_VERSION }}
+        run: |
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            SDK="iphoneos"
+            MIN_VERSION="15.0"
+            TARGET="aarch64-apple-ios15.0"
+          else
+            SDK="iphonesimulator"
+            MIN_VERSION="15.0"
+            TARGET="x86_64-apple-ios15.0-simulator"
+          fi
+
+          SDKPATH=$(xcrun --sdk $SDK --show-sdk-path)
+
+          ./configure \
+            --prefix="$(pwd)/build-${{ matrix.arch }}" \
+            --arch=${{ matrix.arch }} \
+            --target-os=darwin \
+            --cc="clang -target $TARGET" \
+            --sysroot="$SDKPATH" \
+            --extra-cflags="-isysroot $SDKPATH -m${{ matrix.arch == 'arm64' && 'iphoneos' || 'iphonesimulator' }}-version-min=$MIN_VERSION" \
+            --enable-pic \
+            --enable-static \
+            --disable-shared \
+            --disable-programs \
+            --disable-doc \
+            --disable-debug
+
+      - name: Build FFmpeg
+        working-directory: ffmpeg-${{ env.FFMPEG_VERSION }}
+        run: |
+          make -j$(sysctl -n hw.ncpu)
+          make install
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-ios-${{ matrix.arch }}-${{ github.event.inputs.variant }}
+          path: ffmpeg-${{ env.FFMPEG_VERSION }}/build-${{ matrix.arch }}
+
+  create-xcframeworks:
+    needs: build-ios
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download iOS arm64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-ios-arm64-${{ github.event.inputs.variant }}
+          path: build-arm64
+
+      - name: Download iOS x86_64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-ios-x86_64-${{ github.event.inputs.variant }}
+          path: build-x86_64
+
+      - name: Create XCFrameworks
+        run: |
+          LIBS="libavcodec libavformat libavutil libswscale libswresample libavfilter"
+          OUTPUT="packages/ffmpeg-${{ github.event.inputs.variant }}/ios/Frameworks"
+          mkdir -p "$OUTPUT"
+
+          for lib in $LIBS; do
+            xcodebuild -create-xcframework \
+              -library "build-arm64/lib/${lib}.a" \
+              -headers "build-arm64/include" \
+              -library "build-x86_64/lib/${lib}.a" \
+              -headers "build-x86_64/include" \
+              -output "$OUTPUT/${lib}.xcframework"
+          done
+
+      - name: Upload XCFrameworks
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-ios-xcframeworks-${{ github.event.inputs.variant }}
+          path: packages/ffmpeg-${{ github.event.inputs.variant }}/ios
+
+  build-android:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [arm64-v8a, armeabi-v7a, x86_64]
+        include:
+          - arch: arm64-v8a
+            ffmpeg_arch: aarch64
+            cross_prefix: aarch64-linux-android
+            toolchain: aarch64-linux-android
+          - arch: armeabi-v7a
+            ffmpeg_arch: arm
+            cross_prefix: armv7a-linux-androideabi
+            toolchain: arm-linux-androideabi
+          - arch: x86_64
+            ffmpeg_arch: x86_64
+            cross_prefix: x86_64-linux-android
+            toolchain: x86_64-linux-android
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r27
+
+      - name: Install dependencies
+        run: sudo apt-get install -y nasm pkg-config
+
+      - name: Download FFmpeg
+        run: |
+          curl -L "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz" | tar xJ
+
+      - name: Configure and build FFmpeg for Android (${{ matrix.arch }})
+        working-directory: ffmpeg-${{ env.FFMPEG_VERSION }}
+        env:
+          NDK: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          API=24
+          TOOLCHAIN="${NDK}/toolchains/llvm/prebuilt/linux-x86_64"
+          SYSROOT="${TOOLCHAIN}/sysroot"
+
+          ./configure \
+            --prefix="$(pwd)/build-${{ matrix.arch }}" \
+            --arch=${{ matrix.ffmpeg_arch }} \
+            --target-os=android \
+            --cc="${TOOLCHAIN}/bin/${{ matrix.cross_prefix }}${API}-clang" \
+            --cxx="${TOOLCHAIN}/bin/${{ matrix.cross_prefix }}${API}-clang++" \
+            --cross-prefix="${TOOLCHAIN}/bin/llvm-" \
+            --sysroot="$SYSROOT" \
+            --enable-pic \
+            --enable-shared \
+            --disable-static \
+            --disable-programs \
+            --disable-doc \
+            --disable-debug
+
+          make -j$(nproc)
+          make install
+
+      - name: Copy shared libraries
+        run: |
+          OUTPUT="packages/ffmpeg-${{ github.event.inputs.variant }}/android/jniLibs/${{ matrix.arch }}"
+          mkdir -p "$OUTPUT"
+          cp ffmpeg-${FFMPEG_VERSION}/build-${{ matrix.arch }}/lib/*.so "$OUTPUT/"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-android-${{ matrix.arch }}-${{ github.event.inputs.variant }}
+          path: packages/ffmpeg-${{ github.event.inputs.variant }}/android
