@@ -1,23 +1,39 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { useFFmpeg, compress } from '@react-native-nitro-ffmpeg/core';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 
 export function TranscodeScreen() {
-  const [state, actions] = useFFmpeg();
+  const [isRunning, setIsRunning] = useState(false);
+  const [percentage, setPercentage] = useState(0);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleCompress = () => {
-    const inputPath = '/path/to/input.mp4';
-    const outputPath = '/path/to/output.mp4';
+  const handleCompress = async () => {
+    setIsRunning(true);
+    setPercentage(0);
+    setResult(null);
+    setError(null);
 
-    compress(inputPath, outputPath, {
-      quality: 'medium',
-      maxWidth: 1280,
-      videoCodec: 'h264',
-      onProgress: (p) => {
-        // Progress is also tracked via useFFmpeg state
-        console.log(`Progress: ${Math.round((p.percentage ?? 0) * 100)}%`);
-      },
-    });
+    try {
+      const { compress } = require('@react-native-nitro-ffmpeg/core');
+      const inputPath = '/path/to/input.mp4';
+      const outputPath = '/path/to/output.mp4';
+
+      const session = compress(inputPath, outputPath, {
+        quality: 'medium',
+        maxWidth: 1280,
+        videoCodec: 'h264',
+        onProgress: (p: { percentage?: number }) => {
+          setPercentage(p.percentage ?? 0);
+        },
+      });
+
+      const res = await session;
+      setResult(`Completed in ${Math.round(res.duration)}ms`);
+    } catch (err: any) {
+      setError(err?.message ?? 'Native module not available');
+    } finally {
+      setIsRunning(false);
+    }
   };
 
   return (
@@ -29,46 +45,45 @@ export function TranscodeScreen() {
       </Text>
 
       <TouchableOpacity
-        style={[styles.button, state.isRunning && styles.buttonDisabled]}
+        style={[styles.button, isRunning && styles.buttonDisabled]}
         onPress={handleCompress}
-        disabled={state.isRunning}
+        disabled={isRunning}
       >
         <Text style={styles.buttonText}>
-          {state.isRunning ? 'Compressing...' : 'Select & Compress'}
+          {isRunning ? 'Compressing...' : 'Select & Compress'}
         </Text>
       </TouchableOpacity>
 
-      {state.isRunning && (
+      {isRunning && (
         <View style={styles.progressContainer}>
           <View style={styles.progressBar}>
             <View
               style={[
                 styles.progressFill,
-                { width: `${(state.percentage ?? 0) * 100}%` },
+                { width: `${percentage * 100}%` },
               ]}
             />
           </View>
           <Text style={styles.progressText}>
-            {Math.round((state.percentage ?? 0) * 100)}%
+            {Math.round(percentage * 100)}%
           </Text>
         </View>
       )}
 
-      {state.isRunning && (
-        <TouchableOpacity style={styles.cancelButton} onPress={actions.cancel}>
+      {isRunning && (
+        <TouchableOpacity
+          style={styles.cancelButton}
+          onPress={() => {
+            setIsRunning(false);
+            setError('Cancelled');
+          }}
+        >
           <Text style={styles.cancelText}>Cancel</Text>
         </TouchableOpacity>
       )}
 
-      {state.result?.ok && (
-        <Text style={styles.success}>
-          Completed in {Math.round(state.result.duration)}ms
-        </Text>
-      )}
-
-      {state.error && (
-        <Text style={styles.error}>{state.error.message}</Text>
-      )}
+      {result && <Text style={styles.success}>{result}</Text>}
+      {error && <Text style={styles.error}>{error}</Text>}
     </View>
   );
 }

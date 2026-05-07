@@ -1,31 +1,41 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
-import { useFFmpeg, trim } from '@react-native-nitro-ffmpeg/core';
 
 export function TrimScreen() {
-  const [state, actions] = useFFmpeg();
+  const [isRunning, setIsRunning] = useState(false);
+  const [percentage, setPercentage] = useState(0);
   const [startSec, setStartSec] = useState('5');
   const [endSec, setEndSec] = useState('15');
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleTrim = () => {
-    const inputPath = '/path/to/input.mp4';
-    const outputPath = '/path/to/trimmed.mp4';
+  const handleTrim = async () => {
+    setIsRunning(true);
+    setPercentage(0);
+    setResult(null);
+    setError(null);
 
-    trim(inputPath, outputPath, {
-      startMs: parseFloat(startSec) * 1000,
-      endMs: parseFloat(endSec) * 1000,
-      onProgress: (p) => {
-        console.log(`Trim progress: ${Math.round((p.percentage ?? 0) * 100)}%`);
-      },
-    });
+    try {
+      const { trim } = require('@react-native-nitro-ffmpeg/core');
+      const session = trim('/path/to/input.mp4', '/path/to/trimmed.mp4', {
+        startMs: parseFloat(startSec) * 1000,
+        endMs: parseFloat(endSec) * 1000,
+        onProgress: (p: { percentage?: number }) => setPercentage(p.percentage ?? 0),
+      });
+      const res = await session;
+      setResult(`Trimmed in ${Math.round(res.duration)}ms`);
+    } catch (err: any) {
+      setError(err?.message ?? 'Native module not available');
+    } finally {
+      setIsRunning(false);
+    }
   };
 
   return (
     <View style={styles.container}>
       <Text style={styles.heading}>Trim Video</Text>
       <Text style={styles.description}>
-        Cut a video to a specific time range. Set start and end times in
-        seconds.
+        Cut a video to a specific time range. Set start and end times in seconds.
       </Text>
 
       <View style={styles.inputRow}>
@@ -52,43 +62,26 @@ export function TrimScreen() {
       </View>
 
       <TouchableOpacity
-        style={[styles.button, state.isRunning && styles.buttonDisabled]}
+        style={[styles.button, isRunning && styles.buttonDisabled]}
         onPress={handleTrim}
-        disabled={state.isRunning}
+        disabled={isRunning}
       >
         <Text style={styles.buttonText}>
-          {state.isRunning ? 'Trimming...' : 'Select & Trim'}
+          {isRunning ? 'Trimming...' : 'Select & Trim'}
         </Text>
       </TouchableOpacity>
 
-      {state.isRunning && (
-        <>
-          <View style={styles.progressContainer}>
-            <View style={styles.progressBar}>
-              <View
-                style={[
-                  styles.progressFill,
-                  { width: `${(state.percentage ?? 0) * 100}%` },
-                ]}
-              />
-            </View>
-            <Text style={styles.progressText}>
-              {Math.round((state.percentage ?? 0) * 100)}%
-            </Text>
+      {isRunning && (
+        <View style={styles.progressContainer}>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: `${percentage * 100}%` }]} />
           </View>
-          <TouchableOpacity style={styles.cancelButton} onPress={actions.cancel}>
-            <Text style={styles.cancelText}>Cancel</Text>
-          </TouchableOpacity>
-        </>
+          <Text style={styles.progressText}>{Math.round(percentage * 100)}%</Text>
+        </View>
       )}
 
-      {state.result?.ok && (
-        <Text style={styles.success}>
-          Trimmed in {Math.round(state.result.duration)}ms
-        </Text>
-      )}
-
-      {state.error && <Text style={styles.error}>{state.error.message}</Text>}
+      {result && <Text style={styles.success}>{result}</Text>}
+      {error && <Text style={styles.error}>{error}</Text>}
     </View>
   );
 }
@@ -109,42 +102,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2a2a2a',
   },
-  button: {
-    backgroundColor: '#4a9eff',
-    borderRadius: 10,
-    padding: 16,
-    alignItems: 'center',
-  },
+  button: { backgroundColor: '#4a9eff', borderRadius: 10, padding: 16, alignItems: 'center' },
   buttonDisabled: { opacity: 0.5 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  progressContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 20,
-    gap: 12,
-  },
-  progressBar: {
-    flex: 1,
-    height: 8,
-    backgroundColor: '#2a2a2a',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#4a9eff',
-    borderRadius: 4,
-  },
+  progressContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 20, gap: 12 },
+  progressBar: { flex: 1, height: 8, backgroundColor: '#2a2a2a', borderRadius: 4, overflow: 'hidden' },
+  progressFill: { height: '100%', backgroundColor: '#4a9eff', borderRadius: 4 },
   progressText: { color: '#888', fontSize: 14, width: 40, textAlign: 'right' },
-  cancelButton: {
-    marginTop: 12,
-    padding: 12,
-    alignItems: 'center',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#ff4a4a',
-  },
-  cancelText: { color: '#ff4a4a', fontSize: 15, fontWeight: '500' },
   success: { color: '#4aff7a', marginTop: 20, fontSize: 15 },
   error: { color: '#ff4a4a', marginTop: 20, fontSize: 15 },
 });

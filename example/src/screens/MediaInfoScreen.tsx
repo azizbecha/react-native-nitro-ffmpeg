@@ -7,10 +7,32 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
-import { FFprobe, type MediaInfo } from '@react-native-nitro-ffmpeg/core';
+
+interface MediaInfoData {
+  format: {
+    name: string;
+    longName: string;
+    durationMs: number;
+    sizeBytes: number;
+    bitrate: number;
+  };
+  streams: Array<{
+    index: number;
+    type: string;
+    codecName: string;
+    width?: number;
+    height?: number;
+    frameRate?: number;
+    pixelFormat?: string;
+    isHdr?: boolean;
+    sampleRate?: number;
+    channels?: number;
+    channelLayout?: string;
+  }>;
+}
 
 export function MediaInfoScreen() {
-  const [info, setInfo] = useState<MediaInfo | null>(null);
+  const [info, setInfo] = useState<MediaInfoData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,11 +40,12 @@ export function MediaInfoScreen() {
     setLoading(true);
     setError(null);
     try {
+      const { FFprobe } = require('@react-native-nitro-ffmpeg/core');
       const path = '/path/to/video.mp4';
       const mediaInfo = await FFprobe.getMediaInfo(path);
       setInfo(mediaInfo);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+    } catch (err: any) {
+      setError(err?.message ?? 'Native module not available');
     } finally {
       setLoading(false);
     }
@@ -47,12 +70,12 @@ export function MediaInfoScreen() {
       </TouchableOpacity>
 
       {loading && <ActivityIndicator style={styles.loader} color="#4a9eff" />}
-
       {error && <Text style={styles.error}>{error}</Text>}
 
       {info && (
         <View style={styles.infoContainer}>
-          <InfoSection title="Format">
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Format</Text>
             <InfoRow label="Name" value={info.format.name} />
             <InfoRow label="Long Name" value={info.format.longName} />
             <InfoRow
@@ -67,10 +90,13 @@ export function MediaInfoScreen() {
               label="Bitrate"
               value={`${Math.round(info.format.bitrate)} kbps`}
             />
-          </InfoSection>
+          </View>
 
           {info.streams.map((stream, i) => (
-            <InfoSection key={i} title={`Stream ${stream.index} (${stream.type})`}>
+            <View key={i} style={styles.section}>
+              <Text style={styles.sectionTitle}>
+                Stream {stream.index} ({stream.type})
+              </Text>
               <InfoRow label="Codec" value={stream.codecName} />
               {stream.type === 'video' && (
                 <>
@@ -80,10 +106,8 @@ export function MediaInfoScreen() {
                   />
                   <InfoRow
                     label="Frame Rate"
-                    value={`${stream.frameRate.toFixed(2)} fps`}
+                    value={`${(stream.frameRate ?? 0).toFixed(2)} fps`}
                   />
-                  <InfoRow label="Pixel Format" value={stream.pixelFormat} />
-                  <InfoRow label="HDR" value={stream.isHdr ? 'Yes' : 'No'} />
                 </>
               )}
               {stream.type === 'audio' && (
@@ -93,29 +117,13 @@ export function MediaInfoScreen() {
                     value={`${stream.sampleRate} Hz`}
                   />
                   <InfoRow label="Channels" value={String(stream.channels)} />
-                  <InfoRow label="Layout" value={stream.channelLayout} />
                 </>
               )}
-            </InfoSection>
+            </View>
           ))}
         </View>
       )}
     </ScrollView>
-  );
-}
-
-function InfoSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {children}
-    </View>
   );
 }
 

@@ -1,5 +1,5 @@
 {
-  "name": "react-native-nitro-ffmpeg-example",
+  "name": "NitroFFmpegExample",
   "version": "0.0.1",
   "private": true,
   "scripts": {
@@ -8,17 +8,24 @@
     "start": "react-native start"
   },
   "dependencies": {
-    "@react-native-nitro-ffmpeg/core": "workspace:*",
     "react": "19.1.0",
     "react-native": "0.81.5",
-    "react-native-nitro-modules": "^0.35.6",
-    "react-native-document-picker": "^9.3.1",
-    "react-native-safe-area-context": "^5.4.0"
+    "react-native-nitro-modules": "^0.35.6"
   },
   "devDependencies": {
-    "@react-native/babel-preset": "0.83.0",
-    "@react-native/metro-config": "0.83.0",
-    "@types/react": "^19.1.12",
-    "typescript": "^5.9.2"
+    "@babel/core": "^7.25.2",
+    "@babel/preset-env": "^7.25.3",
+    "@babel/runtime": "^7.25.0",
+    "@react-native-community/cli": "20.0.0",
+    "@react-native-community/cli-platform-android": "20.0.0",
+    "@react-native-community/cli-platform-ios": "20.0.0",
+    "@react-native/babel-preset": "0.81.5",
+    "@react-native/gradle-plugin": "0.81.5",
+    "@react-native/metro-config": "0.81.5",
+    "@types/react": "^19.1.0",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
