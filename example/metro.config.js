@@ -1,19 +1,20 @@
 const path = require('path');
-const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
+const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
 
-const root = path.resolve(__dirname, '..');
-const corePackage = path.resolve(root, 'packages', 'core', 'src');
+const corePackageSrc = path.resolve(__dirname, '..', 'packages', 'core', 'src');
 
 const config = {
-  watchFolders: [root],
+  watchFolders: [corePackageSrc],
   resolver: {
-    nodeModulesPaths: [
-      path.resolve(__dirname, 'node_modules'),
-      path.resolve(root, 'node_modules'),
-    ],
-    extraNodeModules: {
-      '@react-native-nitro-ffmpeg/core': corePackage,
-    },
+    extraNodeModules: new Proxy(
+      {'@react-native-nitro-ffmpeg/core': corePackageSrc},
+      {
+        get: (target, name) =>
+          name in target
+            ? target[name]
+            : path.join(__dirname, 'node_modules', String(name)),
+      },
+    ),
   },
 };
 
